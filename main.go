@@ -6,6 +6,7 @@ import (
 	"flag"
 	"fmt"
 	"io/ioutil"
+	"log"
 	"os"
 	"strings"
 	"text/template"
@@ -32,10 +33,10 @@ type Method struct {
 }
 
 type Message struct {
-	Name         string
-	XMLName      string
-	Action       string
-	Params       []MessageParamIn
+	Name    string
+	XMLName string
+	Action  string
+	Params  []MessageParamIn
 
 	ParamName    string
 	XMLParamName string
@@ -94,7 +95,7 @@ func main() {
 		unmarshal(*xsdFile, &s)
 	} else {
 		// TODO: na verdade podemos ter mais de um schema
-		s = d.Types.Schemas[0]
+		s = d.Types.Schemas[1]
 	}
 
 	buf, f := createOut(*outFile)
@@ -137,7 +138,7 @@ func createOut(n string) (*bufio.Writer, *os.File) {
 	if err != nil {
 		exit(err)
 	}
-	
+
 	return bufio.NewWriter(f), f
 }
 
@@ -180,15 +181,15 @@ func create(d *wsdl.Definitions, s *xsd.Schema, b *bufio.Writer, file *os.File) 
 		var t StructType
 		if !found {
 			t = StructType{
-				Name: exportableSymbol(s.ComplexTypes[i].Name),
+				Name:   exportableSymbol(s.ComplexTypes[i].Name),
 				Fields: make([]Field, 0),
 			}
 
 			if s.ComplexTypes[i].Content == nil {
 				for ii := 0; ii < len(s.ComplexTypes[i].Sequence); ii++ {
 					fi := Field{
-						Name: exportableSymbol(s.ComplexTypes[i].Sequence[ii].Name),
-						Type: decodeType(s.ComplexTypes[i].Sequence[ii]),
+						Name:    exportableSymbol(s.ComplexTypes[i].Sequence[ii].Name),
+						Type:    decodeType(s.ComplexTypes[i].Sequence[ii]),
 						XMLName: s.ComplexTypes[i].Sequence[ii].Name,
 					}
 					t.Fields = append(t.Fields, fi)
@@ -197,8 +198,8 @@ func create(d *wsdl.Definitions, s *xsd.Schema, b *bufio.Writer, file *os.File) 
 				t.Fields = append(t.Fields, Field{Name: exportableSymbol(s.ComplexTypes[i].Content.Extension.Base[4:])})
 				for ii := 0; ii < len(s.ComplexTypes[i].Content.Extension.Sequence); ii++ {
 					fi := Field{
-						Name: exportableSymbol(s.ComplexTypes[i].Content.Extension.Sequence[ii].Name),						
-						Type: decodeType(s.ComplexTypes[i].Content.Extension.Sequence[ii]),
+						Name:    exportableSymbol(s.ComplexTypes[i].Content.Extension.Sequence[ii].Name),
+						Type:    decodeType(s.ComplexTypes[i].Content.Extension.Sequence[ii]),
 						XMLName: s.ComplexTypes[i].Content.Extension.Sequence[ii].Name,
 					}
 					t.Fields = append(t.Fields, fi)
@@ -207,25 +208,28 @@ func create(d *wsdl.Definitions, s *xsd.Schema, b *bufio.Writer, file *os.File) 
 			data.Types = append(data.Types, t)
 		}
 	}
-	
+
 	for i := 0; i < len(d.PortType.Operations); i++ {
-		
+
 		m := Method{}
 		m.Name = exportableSymbol(d.PortType.Operations[i].Name)
 		// TODO: get correct action in binding area
 		m.Action = ""
-		
+
+		// Find message corresponding to input param
+		mess := findMessage(d, d.PortType.Operations[i].Input.Message)
 		// find input parameter type
-		e := findElement(s, d.PortType.Operations[i].Input.Message)
-		
+		log.Print(mess.Part.Name)
+		e := findElement(s, mess.Part.Element)
+
 		var c *xsd.ComplexType
-		
+
 		if e.ComplexTypes == nil {
 			c = findComplexType(s, e.Name)
 		} else {
 			c = e.ComplexTypes
 		}
-		
+
 		message := Message{}
 		if c.Name != "" {
 			message.Name = exportableSymbol(c.Name)
@@ -234,7 +238,7 @@ func create(d *wsdl.Definitions, s *xsd.Schema, b *bufio.Writer, file *os.File) 
 			message.Name = exportableSymbol(e.Name)
 			message.XMLName = e.Name
 		}
-		
+
 		if len(c.Sequence) > 0 {
 			si := strings.Index(c.Sequence[0].Type, ":")
 			for _, v := range c.Sequence {
@@ -243,7 +247,7 @@ func create(d *wsdl.Definitions, s *xsd.Schema, b *bufio.Writer, file *os.File) 
 				messageParam.XMLParamName = v.Name
 				messageParam.ParamType = exportableSymbol(v.Type[si+1:])
 				messageParam.Input = true
-				
+
 				message.Params = append(message.Params, messageParam)
 			}
 			data.Messages = append(data.Messages, message)
@@ -254,7 +258,7 @@ func create(d *wsdl.Definitions, s *xsd.Schema, b *bufio.Writer, file *os.File) 
 			m.HasParams = true
 		} else {
 			m.HasParams = false
-		}		
+		}
 
 		// find output parameter type
 		e = findElement(s, d.PortType.Operations[i].Output.Message)
@@ -268,10 +272,10 @@ func create(d *wsdl.Definitions, s *xsd.Schema, b *bufio.Writer, file *os.File) 
 		si := strings.Index(c.Sequence[0].Type, ":")
 
 		message = Message{}
-		
+
 		//message.Name = exportableSymbol(c.Name)
 		//message.XMLName = c.Name
-		
+
 		if c.Name != "" {
 			message.Name = exportableSymbol(c.Name)
 			message.XMLName = c.Name
@@ -279,14 +283,14 @@ func create(d *wsdl.Definitions, s *xsd.Schema, b *bufio.Writer, file *os.File) 
 			message.Name = exportableSymbol(e.Name)
 			message.XMLName = e.Name
 		}
-		
+
 		for _, v := range c.Sequence {
 			messageParam := MessageParamIn{}
 			messageParam.ParamName = exportableSymbol(v.Name)
 			messageParam.XMLParamName = v.Name
 			messageParam.ParamType = exportableSymbol(v.Type[si+1:])
 			messageParam.Input = false
-			
+
 			message.Params = append(message.Params, messageParam)
 		}
 
@@ -303,7 +307,7 @@ func create(d *wsdl.Definitions, s *xsd.Schema, b *bufio.Writer, file *os.File) 
 
 		data.Methods = append(data.Methods, m)
 	}
-	
+
 	// executa o template para geração do arquivo com
 	// o serviço que será consumido
 	err = tmpl.Execute(file, data)
@@ -312,14 +316,29 @@ func create(d *wsdl.Definitions, s *xsd.Schema, b *bufio.Writer, file *os.File) 
 	}
 }
 
+func findMessage(d *wsdl.Definitions, t string) *wsdl.Message {
+	if t[0:3] == "tns" {
+		t = t[4:]
+	}
+
+	for i := 0; i < len(d.Messages); i++ {
+		if d.Messages[i].Name == t {
+			return &d.Messages[i]
+		}
+	}
+
+	return nil
+}
+
 func findElement(s *xsd.Schema, t string) *xsd.Element {
 	if t[0:3] == "tns" {
 		t = t[4:]
-	}	
+	}
 	t = strings.Replace(t, "SoapIn", "", -1)
 	t = strings.Replace(t, "SoapOut", "Response", -1)
+
 	for i := 0; i < len(s.Elements); i++ {
-		if s.Elements[i].Type == t || s.Elements[i].Name == t {			
+		if s.Elements[i].Type == t || s.Elements[i].Name == t {
 			return &s.Elements[i]
 		}
 	}
@@ -330,9 +349,9 @@ func findElement(s *xsd.Schema, t string) *xsd.Element {
 func findComplexType(s *xsd.Schema, n string) *xsd.ComplexType {
 	if n[0:3] == "tns" {
 		n = n[4:]
-	}	
+	}
 	n = strings.Replace(n, "SoapIn", "", -1)
-	n = strings.Replace(n, "SoapOut", "Response", -1)	
+	n = strings.Replace(n, "SoapOut", "Response", -1)
 	for i := 0; i < len(s.ComplexTypes); i++ {
 		if s.ComplexTypes[i].Name == n {
 			return &s.ComplexTypes[i]
