@@ -11,8 +11,8 @@ import (
 	"strings"
 	"text/template"
 
-	"code.google.com/p/wsdl-go/wsdl"
-	"code.google.com/p/wsdl-go/xsd"
+	"github.com/jfrabaute/wsdl-go/wsdl"
+	"github.com/jfrabaute/wsdl-go/xsd"
 )
 
 var wsdlFile = flag.String("w", "", "WSDL file with full path")

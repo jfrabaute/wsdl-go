@@ -3,7 +3,7 @@ package wsdl
 import (
 	"encoding/xml"
 
-	"code.google.com/p/wsdl-go/xsd"
+	"github.com/jfrabaute/wsdl-go/xsd"
 )
 
 type Definitions struct {
@@ -44,7 +44,7 @@ type PortTypeOperation struct {
 }
 
 type PortTypeOperationMessage struct {
-	Name    string `xml:"name,attr,omitempty`
+	Name    string `xml:"name,attr,omitempty"`
 	Message string `xml:"message,attr"`
 }
 

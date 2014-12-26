@@ -5,7 +5,7 @@ var (
 package {{.PackageName}}
 
 import (
-	ws "code.google.com/p/wsdl-go/webservice"
+	ws "github.com/jfrabaute/wsdl-go/webservice"
 	"encoding/xml"
 )
 
